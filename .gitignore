@@ -1,0 +1,22 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+*.sqlite3
+
+# Node
+node_modules/
+dist/
+
+# Logs
+*.log
+
+# Env
+.env
+
+# VSCode
+.vscode/
+
+# OS
+.DS_Store
+
