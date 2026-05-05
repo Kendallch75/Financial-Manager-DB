@@ -1,6 +1,7 @@
+from datetime import datetime
+
 from django.db import models
 from django.utils import timezone
-from datetime import datetime
 
 
 def future_date():
@@ -44,7 +45,7 @@ class Category(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["id_user", "name", "type"],
-                name="uq_category_user_name_type"
+                name="uq_category_user_name_type",
             )
         ]
 
@@ -71,7 +72,7 @@ class Account(models.Model):
         on_delete=models.SET_NULL,
         db_column="id_main_category",
         blank=True,
-        null=True
+        null=True,
     )
     creation_date = models.DateTimeField(auto_now_add=True)
     deleted_at = models.DateTimeField(default=future_date)
@@ -90,7 +91,12 @@ class Service(models.Model):
     provider_name = models.CharField(max_length=100, blank=True, null=True)
     reference_number = models.CharField(max_length=100, blank=True, null=True)
     due_day = models.IntegerField()
-    typical_amount = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
+    typical_amount = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        blank=True,
+        null=True,
+    )
     currency = models.CharField(max_length=3)
     cancellation_date = models.DateTimeField(default=future_date)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -119,41 +125,35 @@ class ExchangeRate(models.Model):
 
 class Movement(models.Model):
     id_movement = models.AutoField(primary_key=True)
-
     id_account = models.ForeignKey(
         Account,
         on_delete=models.CASCADE,
         db_column="id_account",
-        related_name="movements"
+        related_name="movements",
     )
-
     id_destination_account = models.ForeignKey(
         Account,
         on_delete=models.SET_NULL,
         db_column="id_destination_account",
         blank=True,
         null=True,
-        related_name="destination_movements"
+        related_name="destination_movements",
     )
-
     id_category = models.ForeignKey(Category, on_delete=models.CASCADE, db_column="id_category")
-
     id_service = models.ForeignKey(
         Service,
         on_delete=models.SET_NULL,
         db_column="id_service",
         blank=True,
-        null=True
+        null=True,
     )
-
     id_exchange_rate = models.ForeignKey(
         ExchangeRate,
         on_delete=models.SET_NULL,
         db_column="id_exchange_rate",
         blank=True,
-        null=True
+        null=True,
     )
-
     transfer_group_id = models.IntegerField(blank=True, null=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     original_currency = models.CharField(max_length=3)

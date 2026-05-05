@@ -1,15 +1,15 @@
-from rest_framework import serializers
-from django.contrib.auth.hashers import make_password
 from django.conf import settings
+from django.contrib.auth.hashers import make_password
+from rest_framework import serializers
 
 from .models import (
-    User,
     Account,
-    Category,
-    Service,
-    Movement,
-    ExchangeRate,
     AccountLimit,
+    Category,
+    ExchangeRate,
+    Movement,
+    Service,
+    User,
 )
 
 
@@ -38,9 +38,7 @@ class UserSerializer(serializers.ModelSerializer):
         password = validated_data.pop("password", None)
 
         if not password:
-            raise serializers.ValidationError({
-                "password": "La contraseña es obligatoria."
-            })
+            raise serializers.ValidationError({"password": "La contraseña es obligatoria."})
 
         validated_data["password_hash"] = make_password(password)
         validated_data["password_hash_2"] = make_password(password + settings.SECRET_KEY)

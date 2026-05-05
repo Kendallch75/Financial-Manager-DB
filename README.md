@@ -1,33 +1,91 @@
-# FLUJEX - Proyecto completo
+# FLUJEX - Financial Manager
 
-Estructura recomendada:
+Aplicación web responsiva para la gestión de finanzas personales y flujo de caja.
+
+El proyecto está dividido en:
 
 ```text
-flujex_full_project/
+Financial-Manager-DB/
 ├── backend/
+│   ├── config/
+│   ├── core/
+│   ├── db/
+│   └── manage.py
 └── frontend/
 ```
 
-## 1. Backend Django
+## 1. Tecnologías
+
+- Backend: Django + Django REST Framework
+- Base de datos: MySQL
+- Frontend: React + Vite
+- CORS: django-cors-headers
+- Variables de entorno: python-dotenv
+
+## 2. Base de datos
+
+El proyecto incluye scripts SQL separados en:
+
+```text
+backend/db/
+├── init_db.sql
+├── schema.sql
+├── indexes.sql
+├── queries.sql
+└── sample_data.sql
+```
+
+### Archivos SQL
+
+- `init_db.sql`: crea la base de datos `flujex` y el usuario `flujex_user`.
+- `schema.sql`: crea las tablas principales.
+- `indexes.sql`: crea índices para optimización.
+- `queries.sql`: contiene consultas típicas del proyecto.
+- `sample_data.sql`: inserta datos de prueba.
+
+### Tablas principales
+
+- `USER`
+- `CATEGORY`
+- `ACCOUNT`
+- `SERVICE`
+- `EXCHANGE_RATE`
+- `MOVEMENT`
+- `ACCOUNT_LIMIT`
+
+## 3. Crear la base de datos con scripts SQL
+
+Desde la raíz del proyecto:
+
+```bash
+sudo mysql < backend/db/init_db.sql
+sudo mysql < backend/db/schema.sql
+sudo mysql < backend/db/indexes.sql
+```
+
+Opcionalmente, insertar datos demo:
+
+```bash
+sudo mysql < backend/db/sample_data.sql
+```
+
+Usuario demo:
+
+```text
+Email: demo@flujex.local
+Contraseña: demo1234
+```
+
+> Nota: la contraseña demo funciona porque el hash fue generado con Django.
+
+## 4. Backend Django
 
 ```bash
 cd backend
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-```
-
-Edita `.env` con tu usuario y contraseña de MySQL. Antes de migrar, crea la base de datos:
-
-```sql
-CREATE DATABASE flujex_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
-
-Luego ejecuta:
-
-```bash
-python manage.py makemigrations
 python manage.py migrate
 python manage.py runserver
 ```
@@ -51,7 +109,7 @@ Endpoints principales:
 /api/dashboard/
 ```
 
-## 2. Frontend React
+## 5. Frontend React
 
 En otra terminal:
 
@@ -79,15 +137,54 @@ Si necesitas cambiarlo, crea un archivo `.env` en `frontend/`:
 VITE_API_URL=http://127.0.0.1:8000/api
 ```
 
-## 3. Nota importante
+## 6. Normalización
 
-Las tablas del backend respetan la propuesta definitiva:
+La base de datos está planteada hasta Tercera Forma Normal.
 
-- USER
-- CATEGORY
-- ACCOUNT
-- SERVICE
-- EXCHANGE_RATE
-- MOVEMENT
-- ACCOUNT_LIMIT
+### Primera Forma Normal
 
+Cada tabla tiene atributos atómicos y cada registro se identifica con una llave primaria.
+
+Ejemplo:
+
+- `USER.id_user`
+- `CATEGORY.id_category`
+- `ACCOUNT.id_account`
+- `MOVEMENT.id_movement`
+
+### Segunda Forma Normal
+
+Las tablas usan llaves primarias simples, por lo que los atributos no clave dependen completamente de su llave primaria.
+
+Ejemplo:
+
+- En `MOVEMENT`, `amount`, `description` y `movement_date` dependen de `id_movement`.
+
+### Tercera Forma Normal
+
+Se evita guardar datos repetidos que dependan de otras entidades.
+
+Ejemplo:
+
+- `MOVEMENT` no guarda el nombre del usuario.
+- `MOVEMENT` referencia `ACCOUNT` y `CATEGORY`.
+- `CATEGORY` y `ACCOUNT` referencian `USER`.
+
+Esto evita dependencias transitivas y mejora la integridad de los datos.
+
+## 7. Consultas típicas
+
+El archivo `backend/db/queries.sql` incluye consultas para:
+
+- Obtener movimientos de un usuario.
+- Resumir gastos por categoría.
+- Resumir ingresos por categoría.
+- Calcular balance por cuenta.
+- Ver servicios próximos a vencer.
+- Ver grupos de transferencia.
+
+## 8. Notas importantes
+
+Este proyecto mantiene Django como backend funcional, pero agrega los scripts SQL separados para documentar y demostrar el diseño de la base de datos.
+
+La carpeta `backend/db/` funciona como evidencia del diseño relacional, creación de tablas, restricciones, llaves foráneas, índices y consultas.
