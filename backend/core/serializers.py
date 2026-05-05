@@ -1,15 +1,14 @@
-from django.conf import settings
-from django.contrib.auth.hashers import make_password
 from rest_framework import serializers
-
+from django.contrib.auth.hashers import make_password
+from django.conf import settings
 from .models import (
-    Account,
-    AccountLimit,
-    Category,
-    ExchangeRate,
-    Movement,
-    Service,
     User,
+    Account,
+    Category,
+    Service,
+    Movement,
+    ExchangeRate,
+    AccountLimit,
 )
 
 
@@ -36,36 +35,46 @@ class UserSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         password = validated_data.pop("password", None)
-
         if not password:
             raise serializers.ValidationError({"password": "La contraseña es obligatoria."})
-
         validated_data["password_hash"] = make_password(password)
         validated_data["password_hash_2"] = make_password(password + settings.SECRET_KEY)
-
         return User.objects.create(**validated_data)
 
     def update(self, instance, validated_data):
         password = validated_data.pop("password", None)
-
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
-
         if password:
             instance.password_hash = make_password(password)
             instance.password_hash_2 = make_password(password + settings.SECRET_KEY)
-
         instance.save()
         return instance
 
 
+class PublicUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = [
+            "id_user",
+            "first_name",
+            "last_name_1",
+            "last_name_2",
+            "email",
+            "registration_date",
+        ]
+
+
 class CategorySerializer(serializers.ModelSerializer):
+    id_user = serializers.PrimaryKeyRelatedField(read_only=True)
+
     class Meta:
         model = Category
         fields = "__all__"
 
 
 class AccountSerializer(serializers.ModelSerializer):
+    id_user = serializers.PrimaryKeyRelatedField(read_only=True)
     deleted_at = serializers.DateTimeField(read_only=True)
 
     class Meta:
@@ -74,6 +83,7 @@ class AccountSerializer(serializers.ModelSerializer):
 
 
 class ServiceSerializer(serializers.ModelSerializer):
+    id_user = serializers.PrimaryKeyRelatedField(read_only=True)
     cancellation_date = serializers.DateTimeField(read_only=True)
 
     class Meta:
