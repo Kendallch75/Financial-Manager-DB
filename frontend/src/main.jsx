@@ -115,7 +115,12 @@ const placeholders = {
 };
 
 function emptyForm(fields) {
-  return Object.fromEntries(fields.map((field) => [field, '']));
+  return Object.fromEntries(
+    fields.map((field) => [
+      field,
+      field === 'color' ? '#22c55e' : ''
+    ])
+  );
 }
 
 function App() {
@@ -319,6 +324,29 @@ function CrudPage({ config }) {
     }
   }
 
+  function renderCell(row, field) {
+    if (field === 'password') {
+      return '********';
+    }
+
+    if (field === 'color') {
+      return (
+        <div
+          style={{
+            width: '28px',
+            height: '20px',
+            borderRadius: '6px',
+            backgroundColor: row[field] || '#ffffff',
+            border: '1px solid #ccc'
+          }}
+          title={row[field]}
+        />
+      );
+    }
+
+    return String(row[field] ?? '');
+  }
+
   return (
     <section>
       <h1>{config.label}</h1>
@@ -332,8 +360,14 @@ function CrudPage({ config }) {
             {fieldLabels[field] || field}
 
             <input
-              type={field === 'password' ? 'password' : 'text'}
-              value={form[field] ?? ''}
+              type={
+                field === 'password'
+                  ? 'password'
+                  : field === 'color'
+                  ? 'color'
+                  : 'text'
+              }
+              value={form[field] || (field === 'color' ? '#22c55e' : '')}
               placeholder={placeholders[field] || ''}
               onChange={e => setForm({ ...form, [field]: e.target.value })}
             />
@@ -379,7 +413,7 @@ function CrudPage({ config }) {
 
                 {config.fields.slice(0, 5).map(f => (
                   <td key={f}>
-                    {f === 'password' ? '********' : String(row[f] ?? '')}
+                    {renderCell(row, f)}
                   </td>
                 ))}
 
