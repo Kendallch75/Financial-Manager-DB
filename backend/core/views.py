@@ -1,11 +1,11 @@
 from decimal import Decimal
-from datetime import datetime
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
+from datetime import datetime
 
 from rest_framework import status, viewsets
 from rest_framework.decorators import api_view
@@ -40,7 +40,6 @@ def current_user(request):
     user_id = request.session.get("user_id")
     if not user_id:
         return None
-
     try:
         return User.objects.get(
             id_user=user_id,
@@ -59,19 +58,6 @@ def require_login(request):
             status=status.HTTP_401_UNAUTHORIZED,
         )
     return user, None
-
-
-def start_user_session(request, user):
-    """
-    Guarda explícitamente la sesión del usuario.
-    Esto asegura que Django genere la cookie sessionid y que el frontend
-    pueda enviarla luego en dashboard, categories, accounts, etc.
-    """
-    request.session.flush()
-    request.session["user_id"] = user.id_user
-    request.session["user_email"] = user.email
-    request.session.set_expiry(60 * 60 * 24 * 7)  # 7 días
-    request.session.save()
 
 
 @api_view(["POST"])
@@ -99,7 +85,11 @@ def login_view(request):
             status=status.HTTP_401_UNAUTHORIZED,
         )
 
-    start_user_session(request, user)
+    request.session.flush()
+    request.session["user_id"] = user.id_user
+    request.session["user_email"] = user.email
+    request.session.set_expiry(60 * 60 * 24 * 7)
+    request.session.save()
     return Response({"user": PublicUserSerializer(user).data})
 
 
@@ -113,7 +103,9 @@ def register_view(request):
 
     if not first_name or not last_name_1 or not email or not password:
         return Response(
-            {"detail": "Nombre, primer apellido, email y contraseña son obligatorios."},
+            {
+                "detail": "Nombre, primer apellido, email y contraseña son obligatorios."
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -129,24 +121,22 @@ def register_view(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    with transaction.atomic():
-        user = User.objects.create(
-            first_name=first_name,
-            last_name_1=last_name_1,
-            last_name_2=last_name_2,
-            email=email,
-            password_hash=make_password(password),
-            password_hash_2=make_password(password + settings.SECRET_KEY),
-            cancellation_date=future_date(),
-        )
-        create_default_user_data(user)
-
-    start_user_session(request, user)
-
-    return Response(
-        {"user": PublicUserSerializer(user).data},
-        status=status.HTTP_201_CREATED,
+    user = User.objects.create(
+        first_name=first_name,
+        last_name_1=last_name_1,
+        last_name_2=last_name_2,
+        email=email,
+        password_hash=make_password(password),
+        password_hash_2=make_password(password + settings.SECRET_KEY),
     )
+
+    create_default_user_data(user)
+    request.session.flush()
+    request.session["user_id"] = user.id_user
+    request.session["user_email"] = user.email
+    request.session.set_expiry(60 * 60 * 24 * 7)
+    request.session.save()
+    return Response({"user": PublicUserSerializer(user).data}, status=status.HTTP_201_CREATED)
 
 
 @api_view(["POST"])
@@ -171,7 +161,6 @@ def create_default_user_data(user):
         description="Ingresos principales",
         color="#22c55e",
     )
-
     food = Category.objects.create(
         id_user=user,
         name="Alimentación",
@@ -179,7 +168,6 @@ def create_default_user_data(user):
         description="Comidas, supermercado y restaurantes",
         color="#ef4444",
     )
-
     Category.objects.create(
         id_user=user,
         name="Transporte",
@@ -187,16 +175,20 @@ def create_default_user_data(user):
         description="Bus, combustible, Uber o mantenimiento",
         color="#f97316",
     )
-
-    Account.objects.create(
+    account = Account.objects.create(
         id_user=user,
         account_name="Efectivo",
         account_type="ACTIVO",
         currency="CRC",
     )
-
-    # No se crea movimiento con monto 0 para evitar violar CHECK(amount > 0)
-    # si el schema.sql tiene esa restricción.
+    Movement.objects.create(
+        id_account=account,
+        id_category=income,
+        amount=Decimal("0.00"),
+        original_currency="CRC",
+        description="Cuenta creada",
+        movement_date=timezone.localdate(),
+    )
     return food
 
 
@@ -205,6 +197,7 @@ class LoginRequiredViewSet(viewsets.ModelViewSet):
         user = current_user(self.request)
         if not user:
             from rest_framework.exceptions import NotAuthenticated
+
             raise NotAuthenticated("Debe iniciar sesión.")
         return user
 
@@ -275,6 +268,7 @@ class AccountLimitViewSet(LoginRequiredViewSet):
         account = serializer.validated_data.get("id_account")
         if account.id_user_id != user.id_user:
             from rest_framework.exceptions import PermissionDenied
+
             raise PermissionDenied("La cuenta no pertenece al usuario actual.")
         serializer.save()
 
@@ -301,7 +295,15 @@ class MovementViewSet(LoginRequiredViewSet):
         data = request.data
         destination_id = data.get("id_destination_account")
 
-        required = ["id_account", "id_category", "amount", "movement_date", "original_currency"]
+        # Si hay cuenta destino, se trata como transferencia.
+        # En transferencias ya NO se solicita categoría al usuario:
+        # se usa la categoría principal definida en la cuenta destino.
+        is_transfer = bool(destination_id)
+
+        required = ["id_account", "amount", "movement_date", "original_currency"]
+        if not is_transfer:
+            required.append("id_category")
+
         missing = [field for field in required if not data.get(field)]
         if missing:
             return Response(
@@ -309,25 +311,55 @@ class MovementViewSet(LoginRequiredViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if not Account.objects.filter(id_account=data.get("id_account"), id_user=user).exists():
+        try:
+            origin_account = Account.objects.get(
+                id_account=data.get("id_account"),
+                id_user=user,
+            )
+        except Account.DoesNotExist:
             return Response(
                 {"error": "La cuenta origen no pertenece al usuario actual."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if not Category.objects.filter(id_category=data.get("id_category"), id_user=user).exists():
-            return Response(
-                {"error": "La categoría no pertenece al usuario actual."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        destination_account = None
+        category_id = data.get("id_category")
 
-        if destination_id and not Account.objects.filter(
-            id_account=destination_id, id_user=user
-        ).exists():
-            return Response(
-                {"error": "La cuenta destino no pertenece al usuario actual."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        if is_transfer:
+            try:
+                destination_account = Account.objects.get(
+                    id_account=destination_id,
+                    id_user=user,
+                )
+            except Account.DoesNotExist:
+                return Response(
+                    {"error": "La cuenta destino no pertenece al usuario actual."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if origin_account.id_account == destination_account.id_account:
+                return Response(
+                    {"error": "La cuenta origen y destino no pueden ser la misma."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            category_id = destination_account.id_main_category_id
+            if not category_id:
+                return Response(
+                    {
+                        "error": (
+                            "La cuenta destino no tiene categoría principal definida. "
+                            "Asigna una categoría principal a la cuenta destino antes de transferir."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            if not Category.objects.filter(id_category=category_id, id_user=user).exists():
+                return Response(
+                    {"error": "La categoría no pertenece al usuario actual."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         if data.get("id_service") and not Service.objects.filter(
             id_service=data.get("id_service"), id_user=user
@@ -337,7 +369,7 @@ class MovementViewSet(LoginRequiredViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if destination_id:
+        if is_transfer:
             try:
                 amount = Decimal(str(data.get("amount")))
             except Exception:
@@ -346,12 +378,16 @@ class MovementViewSet(LoginRequiredViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            if amount <= 0:
+                return Response(
+                    {"error": "El monto de la transferencia debe ser mayor que cero."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             with transaction.atomic():
                 last_group = (
-                    Movement.objects.filter(
-                        id_account__id_user=user,
-                        transfer_group_id__isnull=False,
-                    )
+                    Movement.objects.filter(id_account__id_user=user)
+                    .exclude(transfer_group_id__isnull=True)
                     .order_by("-transfer_group_id")
                     .values_list("transfer_group_id", flat=True)
                     .first()
@@ -359,7 +395,7 @@ class MovementViewSet(LoginRequiredViewSet):
                 )
                 group_id = int(last_group) + 1
                 common = {
-                    "id_category_id": data.get("id_category"),
+                    "id_category_id": category_id,
                     "id_service_id": data.get("id_service") or None,
                     "id_exchange_rate_id": data.get("id_exchange_rate") or None,
                     "transfer_group_id": group_id,
@@ -367,22 +403,38 @@ class MovementViewSet(LoginRequiredViewSet):
                     "movement_date": data.get("movement_date"),
                 }
                 salida = Movement.objects.create(
-                    id_account_id=data.get("id_account"),
-                    id_destination_account_id=destination_id,
+                    id_account=origin_account,
+                    id_destination_account=destination_account,
                     amount=-abs(amount),
-                    description=data.get("description") or "Transferencia enviada",
+                    description=data.get("description") or "Movimiento enviado",
                     **common,
                 )
+
+                # Si la cuenta destino es de tipo GASTO, NO se crea un ingreso positivo.
+                # Ejemplo: Efectivo -> Gasolina debe quedar como un gasto, no como gasto + ingreso.
+                if destination_account.account_type == "GASTO":
+                    return Response(
+                        {
+                            "message": "Gasto registrado desde cuenta destino de tipo GASTO",
+                            "category_used": category_id,
+                            "gasto": MovementSerializer(salida).data,
+                        },
+                        status=status.HTTP_201_CREATED,
+                    )
+
+                # Para transferencias reales entre cuentas patrimoniales, sí se crea
+                # una salida en la cuenta origen y una entrada en la cuenta destino.
                 entrada = Movement.objects.create(
-                    id_account_id=destination_id,
-                    id_destination_account_id=data.get("id_account"),
+                    id_account=destination_account,
+                    id_destination_account=origin_account,
                     amount=abs(amount),
-                    description="Transferencia recibida",
+                    description=data.get("description") or "Transferencia recibida",
                     **common,
                 )
                 return Response(
                     {
                         "message": "Transferencia creada",
+                        "category_used": category_id,
                         "salida": MovementSerializer(salida).data,
                         "entrada": MovementSerializer(entrada).data,
                     },
@@ -401,8 +453,8 @@ def dashboard(request):
     accounts = Account.objects.filter(id_user=user)
     movements = Movement.objects.filter(id_account__id_user=user)
 
-    income = movements.filter(amount__gt=0).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-    expenses = movements.filter(amount__lt=0).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    income = movements.filter(amount__gt=0).aggregate(total=Sum("amount"))["total"] or 0
+    expenses = movements.filter(amount__lt=0).aggregate(total=Sum("amount"))["total"] or 0
     balance = income + expenses
 
     return Response(
