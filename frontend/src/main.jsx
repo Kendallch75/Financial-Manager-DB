@@ -35,7 +35,6 @@ const resources = {
     fields: [
       'id_account',
       'id_destination_account',
-      'id_category',
       'id_service',
       'id_exchange_rate',
       'amount',

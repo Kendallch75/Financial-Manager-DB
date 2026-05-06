@@ -301,9 +301,6 @@ class MovementViewSet(LoginRequiredViewSet):
         is_transfer = bool(destination_id)
 
         required = ["id_account", "amount", "movement_date", "original_currency"]
-        if not is_transfer:
-            required.append("id_category")
-
         missing = [field for field in required if not data.get(field)]
         if missing:
             return Response(
