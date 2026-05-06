@@ -290,24 +290,15 @@ class MovementViewSet(LoginRequiredViewSet):
             .order_by("-movement_date", "-id_movement")
         )
 
-    def _account_main_category_or_error(self, account, role):
-        category_id = getattr(account, "id_main_category_id", None)
-        if not category_id:
-            return None, Response(
-                {
-                    "error": (
-                        f"La cuenta {role} no tiene categoría principal definida. "
-                        "Asigna una categoría principal antes de registrar movimientos."
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        return category_id, None
-
     def create(self, request, *args, **kwargs):
         user = self.get_logged_user_or_raise()
         data = request.data
         destination_id = data.get("id_destination_account")
+
+        # Si hay cuenta destino, se trata como transferencia.
+        # En transferencias ya NO se solicita categoría al usuario:
+        # se usa la categoría principal definida en la cuenta destino.
+        is_transfer = bool(destination_id)
 
         required = ["id_account", "amount", "movement_date", "original_currency"]
         missing = [field for field in required if not data.get(field)]
@@ -324,12 +315,14 @@ class MovementViewSet(LoginRequiredViewSet):
             )
         except Account.DoesNotExist:
             return Response(
-                {"error": "La cuenta afectada no pertenece al usuario actual."},
+                {"error": "La cuenta origen no pertenece al usuario actual."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         destination_account = None
-        if destination_id:
+        category_id = data.get("id_category")
+
+        if is_transfer:
             try:
                 destination_account = Account.objects.get(
                     id_account=destination_id,
@@ -341,6 +334,30 @@ class MovementViewSet(LoginRequiredViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+            if origin_account.id_account == destination_account.id_account:
+                return Response(
+                    {"error": "La cuenta origen y destino no pueden ser la misma."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            category_id = destination_account.id_main_category_id
+            if not category_id:
+                return Response(
+                    {
+                        "error": (
+                            "La cuenta destino no tiene categoría principal definida. "
+                            "Asigna una categoría principal a la cuenta destino antes de transferir."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            if not Category.objects.filter(id_category=category_id, id_user=user).exists():
+                return Response(
+                    {"error": "La categoría no pertenece al usuario actual."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         if data.get("id_service") and not Service.objects.filter(
             id_service=data.get("id_service"), id_user=user
         ).exists():
@@ -349,159 +366,79 @@ class MovementViewSet(LoginRequiredViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        try:
-            amount = Decimal(str(data.get("amount")))
-        except Exception:
-            return Response(
-                {"error": "Monto inválido"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if amount <= 0:
-            return Response(
-                {"error": "El monto debe ser mayor a cero."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        common_optional = {
-            "id_service_id": data.get("id_service") or None,
-            "id_exchange_rate_id": data.get("id_exchange_rate") or None,
-            "original_currency": data.get("original_currency"),
-            "movement_date": data.get("movement_date"),
-        }
-
-        # Caso nuevo: registrar un ingreso sin cuenta destino.
-        # Ejemplo: Cuenta afectada = Salario (INGRESO), destino = Sin asignar.
-        # Se crea un único movimiento positivo usando la categoría principal de esa cuenta.
-        if not destination_account and origin_account.account_type == "INGRESO":
-            category_id, error = self._account_main_category_or_error(origin_account, "de ingreso")
-            if error:
-                return error
-            movement = Movement.objects.create(
-                id_account=origin_account,
-                id_destination_account=None,
-                id_category_id=category_id,
-                amount=abs(amount),
-                description=data.get("description") or "Ingreso registrado",
-                transfer_group_id=None,
-                **common_optional,
-            )
-            return Response(MovementSerializer(movement).data, status=status.HTTP_201_CREATED)
-
-        # Caso útil equivalente para gastos directos.
-        # Ejemplo: Cuenta afectada = Gasolina (GASTO), destino = Sin asignar.
-        # Se crea un único movimiento negativo usando la categoría principal de esa cuenta.
-        if not destination_account and origin_account.account_type == "GASTO":
-            category_id, error = self._account_main_category_or_error(origin_account, "de gasto")
-            if error:
-                return error
-            movement = Movement.objects.create(
-                id_account=origin_account,
-                id_destination_account=None,
-                id_category_id=category_id,
-                amount=-abs(amount),
-                description=data.get("description") or "Gasto registrado",
-                transfer_group_id=None,
-                **common_optional,
-            )
-            return Response(MovementSerializer(movement).data, status=status.HTTP_201_CREATED)
-
-        # Si no hay destino y la cuenta no es INGRESO/GASTO, la transacción es ambigua.
-        # Para ACTIVO/PASIVO/CAPITAL se debe escoger una cuenta destino o usar una cuenta tipo INGRESO/GASTO.
-        if not destination_account:
-            return Response(
-                {
-                    "error": (
-                        "Para registrar un movimiento sin cuenta destino, la cuenta afectada debe ser "
-                        "de tipo INGRESO o GASTO. Para mover dinero desde Efectivo/Banco, selecciona una cuenta destino."
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        with transaction.atomic():
-            last_group = (
-                Movement.objects.filter(id_account__id_user=user)
-                .exclude(transfer_group_id=None)
-                .order_by("-transfer_group_id")
-                .values_list("transfer_group_id", flat=True)
-                .first()
-                or 0
-            )
-            group_id = int(last_group) + 1
-
-            # Ingreso desde cuenta tipo INGRESO hacia una cuenta real.
-            # Ejemplo: Salario (INGRESO) → Efectivo (ACTIVO).
-            # Se registra solo una entrada positiva en la cuenta destino.
-            if origin_account.account_type == "INGRESO":
-                category_id, error = self._account_main_category_or_error(origin_account, "de ingreso")
-                if error:
-                    return error
-                movement = Movement.objects.create(
-                    id_account=destination_account,
-                    id_destination_account=None,
-                    id_category_id=category_id,
-                    amount=abs(amount),
-                    description=data.get("description") or f"Ingreso desde {origin_account.account_name}",
-                    transfer_group_id=group_id,
-                    **common_optional,
+        if is_transfer:
+            try:
+                amount = Decimal(str(data.get("amount")))
+            except Exception:
+                return Response(
+                    {"error": "Monto inválido"},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
-                return Response(MovementSerializer(movement).data, status=status.HTTP_201_CREATED)
 
-            # Gasto desde una cuenta real hacia una cuenta tipo GASTO.
-            # Ejemplo: Efectivo (ACTIVO) → Gasolina (GASTO).
-            # Se registra solo una salida negativa desde la cuenta origen.
-            if destination_account.account_type == "GASTO":
-                category_id, error = self._account_main_category_or_error(destination_account, "de gasto destino")
-                if error:
-                    return error
-                movement = Movement.objects.create(
+            if amount <= 0:
+                return Response(
+                    {"error": "El monto de la transferencia debe ser mayor que cero."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            with transaction.atomic():
+                last_group = (
+                    Movement.objects.filter(id_account__id_user=user)
+                    .exclude(transfer_group_id__isnull=True)
+                    .order_by("-transfer_group_id")
+                    .values_list("transfer_group_id", flat=True)
+                    .first()
+                    or 0
+                )
+                group_id = int(last_group) + 1
+                common = {
+                    "id_category_id": category_id,
+                    "id_service_id": data.get("id_service") or None,
+                    "id_exchange_rate_id": data.get("id_exchange_rate") or None,
+                    "transfer_group_id": group_id,
+                    "original_currency": data.get("original_currency"),
+                    "movement_date": data.get("movement_date"),
+                }
+                salida = Movement.objects.create(
                     id_account=origin_account,
                     id_destination_account=destination_account,
-                    id_category_id=category_id,
                     amount=-abs(amount),
-                    description=data.get("description") or f"Gasto en {destination_account.account_name}",
-                    transfer_group_id=group_id,
-                    **common_optional,
+                    description=data.get("description") or "Movimiento enviado",
+                    **common,
                 )
-                return Response(MovementSerializer(movement).data, status=status.HTTP_201_CREATED)
 
-            # Transferencia real entre cuentas que acumulan saldo.
-            # Ejemplo: Efectivo (ACTIVO) → Banco (ACTIVO).
-            category_id, error = self._account_main_category_or_error(destination_account, "destino")
-            if error:
-                return error
+                # Si la cuenta destino es de tipo GASTO, NO se crea un ingreso positivo.
+                # Ejemplo: Efectivo -> Gasolina debe quedar como un gasto, no como gasto + ingreso.
+                if destination_account.account_type == "GASTO":
+                    return Response(
+                        {
+                            "message": "Gasto registrado desde cuenta destino de tipo GASTO",
+                            "category_used": category_id,
+                            "gasto": MovementSerializer(salida).data,
+                        },
+                        status=status.HTTP_201_CREATED,
+                    )
 
-            common = {
-                "id_category_id": category_id,
-                "id_service_id": data.get("id_service") or None,
-                "id_exchange_rate_id": data.get("id_exchange_rate") or None,
-                "transfer_group_id": group_id,
-                "original_currency": data.get("original_currency"),
-                "movement_date": data.get("movement_date"),
-            }
-            salida = Movement.objects.create(
-                id_account=origin_account,
-                id_destination_account=destination_account,
-                amount=-abs(amount),
-                description=data.get("description") or "Transferencia enviada",
-                **common,
-            )
-            entrada = Movement.objects.create(
-                id_account=destination_account,
-                id_destination_account=origin_account,
-                amount=abs(amount),
-                description="Transferencia recibida",
-                **common,
-            )
-            return Response(
-                {
-                    "message": "Transferencia creada",
-                    "salida": MovementSerializer(salida).data,
-                    "entrada": MovementSerializer(entrada).data,
-                },
-                status=status.HTTP_201_CREATED,
-            )
+                # Para transferencias reales entre cuentas patrimoniales, sí se crea
+                # una salida en la cuenta origen y una entrada en la cuenta destino.
+                entrada = Movement.objects.create(
+                    id_account=destination_account,
+                    id_destination_account=origin_account,
+                    amount=abs(amount),
+                    description=data.get("description") or "Transferencia recibida",
+                    **common,
+                )
+                return Response(
+                    {
+                        "message": "Transferencia creada",
+                        "category_used": category_id,
+                        "salida": MovementSerializer(salida).data,
+                        "entrada": MovementSerializer(entrada).data,
+                    },
+                    status=status.HTTP_201_CREATED,
+                )
+
+        return super().create(request, *args, **kwargs)
 
 
 @api_view(["GET"])
