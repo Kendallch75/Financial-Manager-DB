@@ -91,7 +91,6 @@ class Service(models.Model):
     provider_name = models.CharField(max_length=100, blank=True, null=True)
     reference_number = models.CharField(max_length=100, blank=True, null=True)
     due_day = models.IntegerField()
-    payment_interval_months = models.IntegerField(default=1)
     typical_amount = models.DecimalField(
         max_digits=10,
         decimal_places=2,

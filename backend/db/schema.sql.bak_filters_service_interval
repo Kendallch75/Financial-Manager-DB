@@ -70,7 +70,6 @@ CREATE TABLE SERVICE (
     provider_name VARCHAR(100),
     reference_number VARCHAR(100),
     due_day INT NOT NULL,
-    payment_interval_months INT NOT NULL DEFAULT 1,
     typical_amount DECIMAL(10, 2),
     currency CHAR(3) NOT NULL,
     cancellation_date DATETIME NOT NULL DEFAULT '2099-12-31 23:59:59',
@@ -82,10 +81,7 @@ CREATE TABLE SERVICE (
         ON DELETE CASCADE,
 
     CONSTRAINT chk_service_due_day
-        CHECK (due_day BETWEEN 1 AND 31),
-
-    CONSTRAINT chk_service_payment_interval
-        CHECK (payment_interval_months BETWEEN 1 AND 24)
+        CHECK (due_day BETWEEN 1 AND 31)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE EXCHANGE_RATE (

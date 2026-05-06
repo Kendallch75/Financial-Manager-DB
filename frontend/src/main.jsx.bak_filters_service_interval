@@ -74,7 +74,6 @@ const resources = {
       'provider_name',
       'reference_number',
       'due_day',
-      'payment_interval_months',
       'typical_amount',
       'currency',
     ],
@@ -118,7 +117,6 @@ const fieldLabels = {
   provider_name: 'Proveedor',
   reference_number: 'Referencia',
   due_day: 'Día de pago',
-  payment_interval_months: 'Frecuencia (meses)',
   typical_amount: 'Monto típico',
   id_account: 'Cuenta afectada',
   id_destination_account: 'Cuenta destino',
@@ -144,7 +142,6 @@ const placeholders = {
   original_currency: 'CRC',
   movement_date: '2026-04-27',
   rate_date: '2026-04-27T00:00:00',
-  payment_interval_months: '1',
 };
 
 const selectOptions = {
@@ -169,10 +166,6 @@ const selectOptions = {
     { value: 'USD', label: 'USD' },
     { value: 'EUR', label: 'EUR' },
   ],
-  payment_interval_months: Array.from({ length: 24 }, (_, i) => ({
-    value: String(i + 1),
-    label: i === 0 ? 'Cada mes' : `Cada ${i + 1} meses`,
-  })),
 };
 
 const relationConfig = {
@@ -216,7 +209,7 @@ const relationConfig = {
 
 function emptyForm(fields) {
   return Object.fromEntries(
-    fields.map((field) => [field, field === 'color' ? '#22c55e' : field === 'payment_interval_months' ? '1' : ''])
+    fields.map((field) => [field, field === 'color' ? '#22c55e' : ''])
   );
 }
 
@@ -521,15 +514,8 @@ function CrudPage({ config }) {
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState('');
   const [lookups, setLookups] = useState({});
-  const [searchText, setSearchText] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
 
   const visibleFields = config.fields;
-  const dateFields = useMemo(
-    () => config.fields.filter((field) => field.includes('date') || field === 'start_date' || field === 'end_date'),
-    [config.fields]
-  );
 
   const load = () => {
     setRows([]);
@@ -573,11 +559,6 @@ function CrudPage({ config }) {
     setForm(emptyForm(config.fields));
     setEditing(null);
     setError('');
-    setRows([]);
-    setLookups({});
-    setSearchText('');
-    setDateFrom('');
-    setDateTo('');
     load();
     loadLookups();
   }, [config.endpoint]);
@@ -587,7 +568,6 @@ function CrudPage({ config }) {
     Object.keys(payload).forEach((key) => {
       if (payload[key] === '') payload[key] = null;
       if (relationConfig[key] && payload[key] !== null) payload[key] = Number(payload[key]);
-      if (key === 'payment_interval_months' && payload[key] !== null) payload[key] = Number(payload[key]);
     });
     return payload;
   }
@@ -692,37 +672,12 @@ function CrudPage({ config }) {
     return (
       <input
         type={inputType}
-        inputMode={inputType === 'number' ? 'decimal' : undefined}
-        min={field === 'payment_interval_months' ? '1' : undefined}
-        max={field === 'payment_interval_months' ? '24' : undefined}
         value={form[field] ?? ''}
         placeholder={placeholders[field] || ''}
         onChange={(e) => setForm({ ...form, [field]: e.target.value })}
       />
     );
   }
-
-  const filteredRows = useMemo(() => {
-    const term = searchText.trim().toLowerCase();
-
-    return rows.filter((row) => {
-      const matchesText = !term || config.fields.some((field) => {
-        const raw = relationConfig[field] ? relationLabel(field, row[field]) : row[field];
-        return String(raw ?? '').toLowerCase().includes(term);
-      });
-
-      const matchesDate = dateFields.length === 0 || dateFields.some((field) => {
-        const value = row[field];
-        if (!value) return false;
-        const current = String(value).slice(0, 10);
-        if (dateFrom && current < dateFrom) return false;
-        if (dateTo && current > dateTo) return false;
-        return true;
-      }) || (!dateFrom && !dateTo);
-
-      return matchesText && matchesDate;
-    });
-  }, [rows, searchText, dateFrom, dateTo, dateFields, config.fields, lookups]);
 
   return (
     <>
@@ -732,7 +687,6 @@ function CrudPage({ config }) {
       </section>
 
       {error && <div className="error">{error}</div>}
-
 
       <section className="panel form-panel">
         <form className="form" onSubmit={submit}>
@@ -755,34 +709,6 @@ function CrudPage({ config }) {
           </div>
         </form>
       </section>
-      <section className="panel filter-panel">
-        <div className="filter-grid">
-          <label>Buscar
-            <input
-              type="search"
-              value={searchText}
-              placeholder="Buscar en esta vista..."
-              onChange={(e) => setSearchText(e.target.value)}
-            />
-          </label>
-          {dateFields.length > 0 && (
-            <>
-              <label>Desde
-                <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-              </label>
-              <label>Hasta
-                <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-              </label>
-            </>
-          )}
-          <div className="filter-actions">
-            <button type="button" className="secondary" onClick={() => { setSearchText(''); setDateFrom(''); setDateTo(''); }}>
-              Limpiar filtros
-            </button>
-            <span>{filteredRows.length} de {rows.length} registros</span>
-          </div>
-        </div>
-      </section>
 
       <section className="panel table-panel">
         <div className="table-wrap">
@@ -797,7 +723,7 @@ function CrudPage({ config }) {
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map((row, index) => (
+              {rows.map((row, index) => (
                 <tr key={`${config.endpoint}-${row[config.pk] ?? index}`}>
                   <td>{row[config.pk]}</td>
                   {config.fields.slice(0, 5).map((field) => (

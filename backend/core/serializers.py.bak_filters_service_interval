@@ -91,14 +91,6 @@ class ServiceSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-
-    def validate_payment_interval_months(self, value):
-        if value is None:
-            return 1
-        if value < 1 or value > 24:
-            raise serializers.ValidationError('La frecuencia debe estar entre 1 y 24 meses.')
-        return value
-
 class ExchangeRateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExchangeRate
