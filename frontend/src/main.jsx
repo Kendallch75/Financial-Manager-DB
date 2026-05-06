@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   Wallet,
@@ -11,6 +11,7 @@ import {
   LogOut,
   UserPlus,
   LogIn,
+  ChevronDown,
 } from 'lucide-react';
 import {
   BarChart,
@@ -24,38 +25,10 @@ import api from './services/api';
 import './styles.css';
 
 const resources = {
-  categories: {
-    label: 'Categorías',
-    icon: Tags,
-    endpoint: '/categories/',
-    pk: 'id_category',
-    fields: ['name', 'type', 'description', 'color'],
-  },
-  accounts: {
-    label: 'Cuentas',
-    icon: Landmark,
-    endpoint: '/accounts/',
-    pk: 'id_account',
-    fields: ['account_name', 'account_type', 'currency', 'id_main_category'],
-    softDeleteField: 'deleted_at',
-  },
-  services: {
-    label: 'Servicios',
-    icon: Receipt,
-    endpoint: '/services/',
-    pk: 'id_service',
-    fields: [
-      'service_name',
-      'provider_name',
-      'reference_number',
-      'due_day',
-      'typical_amount',
-      'currency',
-    ],
-    softDeleteField: 'cancellation_date',
-  },
   movements: {
-    label: 'Movimientos',
+    label: 'Transacciones',
+    title: 'Transacciones',
+    description: 'Registra ingresos, gastos y transferencias entre cuentas.',
     icon: Repeat,
     endpoint: '/movements/',
     pk: 'id_movement',
@@ -71,8 +44,46 @@ const resources = {
       'movement_date',
     ],
   },
+  categories: {
+    label: 'Categorías',
+    title: 'Categorías',
+    description: 'Clasifica tus ingresos y gastos con categorías personalizadas.',
+    icon: Tags,
+    endpoint: '/categories/',
+    pk: 'id_category',
+    fields: ['name', 'type', 'description', 'color'],
+  },
+  accounts: {
+    label: 'Cuentas',
+    title: 'Cuentas',
+    description: 'Administra las cuentas o rubros donde se registran movimientos.',
+    icon: Landmark,
+    endpoint: '/accounts/',
+    pk: 'id_account',
+    fields: ['account_name', 'account_type', 'currency', 'id_main_category'],
+    softDeleteField: 'deleted_at',
+  },
+  services: {
+    label: 'Servicios',
+    title: 'Servicios',
+    description: 'Controla pagos recurrentes y servicios por vencer.',
+    icon: Receipt,
+    endpoint: '/services/',
+    pk: 'id_service',
+    fields: [
+      'service_name',
+      'provider_name',
+      'reference_number',
+      'due_day',
+      'typical_amount',
+      'currency',
+    ],
+    softDeleteField: 'cancellation_date',
+  },
   exchangeRates: {
     label: 'Tipos de cambio',
+    title: 'Tipos de cambio',
+    description: 'Registra tasas de conversión entre monedas.',
     icon: BarChart3,
     endpoint: '/exchange-rates/',
     pk: 'id_exchange_rate',
@@ -80,6 +91,8 @@ const resources = {
   },
   accountLimits: {
     label: 'Límites',
+    title: 'Límites de cuenta',
+    description: 'Define límites de gasto por cuenta y período.',
     icon: Gauge,
     endpoint: '/account-limits/',
     pk: 'id_limit',
@@ -106,7 +119,7 @@ const fieldLabels = {
   reference_number: 'Referencia',
   due_day: 'Día de pago',
   typical_amount: 'Monto típico',
-  id_account: 'Cuenta origen',
+  id_account: 'Cuenta afectada',
   id_destination_account: 'Cuenta destino',
   id_category: 'Categoría',
   id_service: 'Servicio',
@@ -125,11 +138,9 @@ const fieldLabels = {
 
 const placeholders = {
   password: 'Ingrese una contraseña',
-  type: 'EXPENSE o INCOME',
-  account_type: 'ACTIVO, PASIVO, CAPITAL, INGRESO o GASTO',
+  color: '#22c55e',
   currency: 'CRC',
   original_currency: 'CRC',
-  color: '#22c55e',
   movement_date: '2026-04-27',
   rate_date: '2026-04-27T00:00:00',
 };
@@ -174,13 +185,13 @@ const relationConfig = {
   id_account: {
     endpoint: '/accounts/',
     pk: 'id_account',
-    label: (item) => item.account_name,
+    label: (item) => `${item.account_name} (${item.account_type})`,
     allowBlank: false,
   },
   id_destination_account: {
     endpoint: '/accounts/',
     pk: 'id_account',
-    label: (item) => item.account_name,
+    label: (item) => `${item.account_name} (${item.account_type})`,
     allowBlank: true,
   },
   id_service: {
@@ -204,9 +215,23 @@ function emptyForm(fields) {
 }
 
 function App() {
-  const [active, setActive] = useState('dashboard');
+  const [active, setActive] = useState('movements');
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const navItems = useMemo(
+    () => [
+      { key: 'movements', label: 'Transacciones', icon: Repeat },
+      { key: 'dashboard', label: 'Dashboard', icon: Wallet },
+      ...Object.entries(resources)
+        .filter(([key]) => key !== 'movements')
+        .map(([key, item]) => ({ key, label: item.label, icon: item.icon })),
+    ],
+    []
+  );
+
+  const activeItem = navItems.find((item) => item.key === active) || navItems[0];
 
   useEffect(() => {
     api
@@ -219,7 +244,13 @@ function App() {
   async function logout() {
     await api.post('/auth/logout/');
     setUser(null);
-    setActive('dashboard');
+    setActive('movements');
+    setMenuOpen(false);
+  }
+
+  function navigate(key) {
+    setActive(key);
+    setMenuOpen(false);
   }
 
   if (checking) {
@@ -231,46 +262,57 @@ function App() {
   }
 
   return (
-    <div className="app">
-      <aside className="sidebar">
-        <div className="brand">
-          <Wallet size={34} />
+    <div className="app-shell">
+      <header className="topbar">
+        <div className="brand-block">
+          <div className="brand-icon"><Wallet size={22} /></div>
           <div>
             <strong>Financial Manager</strong>
             <span>Finanzas personales</span>
           </div>
         </div>
 
-        <div className="session-box">
+        <div className="nav-dropdown">
+          <button
+            type="button"
+            className="nav-trigger"
+            onClick={() => setMenuOpen((value) => !value)}
+            aria-expanded={menuOpen}
+          >
+            <span>Vista: {activeItem.label}</span>
+            <ChevronDown size={18} />
+          </button>
+
+          {menuOpen && (
+            <div className="nav-menu">
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={active === item.key ? 'active' : ''}
+                    onClick={() => navigate(item.key)}
+                  >
+                    <Icon size={18} />
+                    {item.label}
+                  </button>
+                );
+              })}
+              <button type="button" className="logout-menu-btn" onClick={logout}>
+                <LogOut size={18} />
+                Cerrar sesión
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="session-pill">
           <span>Sesión activa</span>
           <strong>{user.first_name} {user.last_name_1}</strong>
           <small>{user.email}</small>
         </div>
-
-        <button
-          className={active === 'dashboard' ? 'active' : ''}
-          onClick={() => setActive('dashboard')}
-        >
-          <Gauge size={18} /> Dashboard
-        </button>
-
-        {Object.entries(resources).map(([key, item]) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={key}
-              className={active === key ? 'active' : ''}
-              onClick={() => setActive(key)}
-            >
-              <Icon size={18} /> {item.label}
-            </button>
-          );
-        })}
-
-        <button className="logout-btn" onClick={logout}>
-          <LogOut size={18} /> Cerrar sesión
-        </button>
-      </aside>
+      </header>
 
       <main className="content">
         {active === 'dashboard' ? (
@@ -321,7 +363,11 @@ function AuthScreen({ onLogin }) {
     setMode(nextMode);
     setError('');
     if (nextMode === 'login') {
-      setForm((prev) => ({ ...prev, email: 'demo@flujex.local', password: 'demo1234' }));
+      setForm((prev) => ({
+        ...prev,
+        email: 'demo@flujex.local',
+        password: 'demo1234',
+      }));
     } else {
       setForm({
         first_name: '',
@@ -334,22 +380,27 @@ function AuthScreen({ onLogin }) {
   }
 
   return (
-    <div className="auth-page">
-      <section className="auth-card">
-        <div className="brand auth-brand">
-          <Wallet size={38} />
-          <div>
-            <strong>Financial Manager</strong>
-            <span>Finanzas personales independientes por usuario</span>
-          </div>
+    <section className="auth-page">
+      <div className="auth-card">
+        <div className="auth-brand">
+          <h1>Financial Manager</h1>
+          <span>Finanzas personales independientes por usuario</span>
         </div>
 
         <div className="auth-tabs">
-          <button className={mode === 'login' ? 'active' : ''} onClick={() => switchMode('login')}>
-            <LogIn size={17} /> Iniciar sesión
+          <button
+            type="button"
+            className={mode === 'login' ? 'active' : ''}
+            onClick={() => switchMode('login')}
+          >
+            <LogIn size={18} /> Iniciar sesión
           </button>
-          <button className={mode === 'register' ? 'active' : ''} onClick={() => switchMode('register')}>
-            <UserPlus size={17} /> Crear cuenta
+          <button
+            type="button"
+            className={mode === 'register' ? 'active' : ''}
+            onClick={() => switchMode('register')}
+          >
+            <UserPlus size={18} /> Crear cuenta
           </button>
         </div>
 
@@ -358,42 +409,33 @@ function AuthScreen({ onLogin }) {
         <form className="auth-form" onSubmit={submit}>
           {mode === 'register' && (
             <>
-              <label>
-                Nombre
+              <label>Nombre
                 <input value={form.first_name} onChange={(e) => update('first_name', e.target.value)} />
               </label>
-              <label>
-                Primer apellido
+              <label>Primer apellido
                 <input value={form.last_name_1} onChange={(e) => update('last_name_1', e.target.value)} />
               </label>
-              <label>
-                Segundo apellido
+              <label>Segundo apellido
                 <input value={form.last_name_2} onChange={(e) => update('last_name_2', e.target.value)} />
               </label>
             </>
           )}
-
-          <label>
-            Email
+          <label>Email
             <input type="email" value={form.email} onChange={(e) => update('email', e.target.value)} />
           </label>
-          <label>
-            Contraseña
+          <label>Contraseña
             <input type="password" value={form.password} onChange={(e) => update('password', e.target.value)} />
           </label>
-
           <button type="submit" disabled={loading}>
             {loading ? 'Procesando...' : mode === 'login' ? 'Entrar' : 'Crear cuenta'}
           </button>
         </form>
 
         {mode === 'login' && (
-          <p className="muted auth-note">
-            Cuenta demo: <strong>demo@flujex.local</strong> / <strong>demo1234</strong>
-          </p>
+          <p className="auth-note">Cuenta demo: demo@flujex.local / demo1234</p>
         )}
-      </section>
-    </div>
+      </div>
+    </section>
   );
 }
 
@@ -422,36 +464,43 @@ function Dashboard() {
 
   return (
     <>
-      <h1>Dashboard</h1>
-      <p className="muted">Resumen general de tu cuenta.</p>
+      <section className="page-heading">
+        <h1>Dashboard</h1>
+        <p className="muted">Resumen general de tu cuenta.</p>
+      </section>
+
       {error && <div className="error">{error}</div>}
-      <div className="cards">
-        <Card title="Usuarios" value={stats.total_users} />
+
+      <section className="cards">
         <Card title="Cuentas" value={stats.total_accounts} />
         <Card title="Ingresos" value={stats.income} />
         <Card title="Gastos" value={stats.expenses} />
         <Card title="Balance" value={stats.balance} />
-      </div>
-      <div className="panel chart">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chart}>
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip />
-            <Bar dataKey="total" />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      </section>
+
+      <section className="panel">
+        <h2>Resumen gráfico</h2>
+        <div className="chart">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chart}>
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="total" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </section>
     </>
   );
 }
 
 function Card({ title, value }) {
   return (
-    <div className="card">
+    <article className="card">
       <span>{title}</span>
       <strong>{String(value)}</strong>
-    </div>
+    </article>
   );
 }
 
@@ -461,6 +510,8 @@ function CrudPage({ config }) {
   const [editing, setEditing] = useState(null);
   const [error, setError] = useState('');
   const [lookups, setLookups] = useState({});
+
+  const visibleFields = config.fields;
 
   const load = () => {
     api
@@ -484,7 +535,6 @@ function CrudPage({ config }) {
       setLookups({});
       return;
     }
-
     const uniqueEndpoints = [...new Set(relationFields.map((field) => relationConfig[field].endpoint))];
     try {
       const responses = await Promise.all(uniqueEndpoints.map((endpoint) => api.get(endpoint)));
@@ -508,8 +558,9 @@ function CrudPage({ config }) {
 
   function cleanPayload() {
     const payload = { ...form };
-    Object.keys(payload).forEach((k) => {
-      if (payload[k] === '') payload[k] = null;
+    Object.keys(payload).forEach((key) => {
+      if (payload[key] === '') payload[key] = null;
+      if (relationConfig[key] && payload[key] !== null) payload[key] = Number(payload[key]);
     });
     return payload;
   }
@@ -535,7 +586,7 @@ function CrudPage({ config }) {
   function edit(row) {
     setEditing(row[config.pk]);
     const nextForm = Object.fromEntries(
-      config.fields.map((f) => [f, row[f] ?? ''])
+      config.fields.map((field) => [field, row[field] ?? ''])
     );
     setForm(nextForm);
   }
@@ -547,9 +598,8 @@ function CrudPage({ config }) {
     if (!confirm(message)) return;
     try {
       if (config.softDeleteField) {
-        const today = new Date().toISOString();
         await api.patch(`${config.endpoint}${id}/`, {
-          [config.softDeleteField]: today,
+          [config.softDeleteField]: new Date().toISOString(),
         });
       } else {
         await api.delete(`${config.endpoint}${id}/`);
@@ -572,9 +622,7 @@ function CrudPage({ config }) {
 
   function renderCell(row, field) {
     if (field === 'color') {
-      return (
-        <span className="color-dot" style={{ background: row[field] || '#e2e8f0' }} />
-      );
+      return <span className="color-dot" style={{ background: row[field] }} />;
     }
     if (relationConfig[field]) {
       return relationLabel(field, row[field]);
@@ -585,15 +633,10 @@ function CrudPage({ config }) {
   function renderField(field) {
     if (selectOptions[field]) {
       return (
-        <select
-          value={form[field] ?? ''}
-          onChange={(e) => setForm({ ...form, [field]: e.target.value })}
-        >
+        <select value={form[field] ?? ''} onChange={(e) => setForm({ ...form, [field]: e.target.value })}>
           <option value="">Seleccione...</option>
           {selectOptions[field].map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
+            <option key={option.value} value={option.value}>{option.label}</option>
           ))}
         </select>
       );
@@ -603,28 +646,27 @@ function CrudPage({ config }) {
       const relation = relationConfig[field];
       const options = lookups[relation.endpoint] || [];
       return (
-        <select
-          value={form[field] ?? ''}
-          onChange={(e) => setForm({ ...form, [field]: e.target.value })}
-        >
+        <select value={form[field] ?? ''} onChange={(e) => setForm({ ...form, [field]: e.target.value })}>
           {relation.allowBlank && <option value="">Sin asignar</option>}
           {!relation.allowBlank && <option value="">Seleccione...</option>}
           {options.map((option) => (
-            <option key={option[relation.pk]} value={option[relation.pk]}>
-              {relation.label(option)}
-            </option>
+            <option key={option[relation.pk]} value={option[relation.pk]}>{relation.label(option)}</option>
           ))}
         </select>
       );
     }
 
-    const inputType = field.includes('date') ? 'date' : field.includes('amount') || field === 'rate' || field === 'due_day' ? 'number' : 'text';
+    const inputType = field.includes('date')
+      ? 'date'
+      : field.includes('amount') || field === 'rate' || field === 'due_day'
+        ? 'number'
+        : 'text';
+
     return (
       <input
         type={inputType}
         value={form[field] ?? ''}
         placeholder={placeholders[field] || ''}
-        step={field.includes('amount') || field === 'rate' ? '0.01' : undefined}
         onChange={(e) => setForm({ ...form, [field]: e.target.value })}
       />
     );
@@ -632,65 +674,66 @@ function CrudPage({ config }) {
 
   return (
     <>
-      <h1>{config.label}</h1>
-      <p className="muted">Crear, editar, listar y eliminar registros de tu cuenta.</p>
+      <section className="page-heading">
+        <h1>{config.title || config.label}</h1>
+        <p className="muted">{config.description || 'Crear, editar, listar y eliminar registros de tu cuenta.'}</p>
+      </section>
+
       {error && <div className="error">{error}</div>}
 
-      <form className="panel form" onSubmit={submit}>
-        {config.fields.map((field) => (
-          <label key={field}>
-            {fieldLabels[field] || field}
-            {renderField(field)}
-          </label>
-        ))}
-        <div className="actions">
-          <button>{editing ? 'Actualizar' : 'Guardar'}</button>
-          {editing && (
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => {
+      <section className="panel form-panel">
+        <form className="form" onSubmit={submit}>
+          {visibleFields.map((field) => (
+            <label key={field}>
+              {fieldLabels[field] || field}
+              {renderField(field)}
+            </label>
+          ))}
+          <div className="actions">
+            <button type="submit">{editing ? 'Actualizar' : 'Guardar'}</button>
+            {editing && (
+              <button type="button" className="secondary" onClick={() => {
                 setEditing(null);
                 setForm(emptyForm(config.fields));
-              }}
-            >
-              Cancelar edición
-            </button>
-          )}
-        </div>
-      </form>
+              }}>
+                Cancelar edición
+              </button>
+            )}
+          </div>
+        </form>
+      </section>
 
-      <div className="panel table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              {config.fields.slice(0, 5).map((f) => (
-                <th key={f}>{fieldLabels[f] || f}</th>
-              ))}
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row[config.pk]}>
-                <td>{row[config.pk]}</td>
-                {config.fields.slice(0, 5).map((f) => (
-                  <td key={f}>{renderCell(row, f)}</td>
+      <section className="panel table-panel">
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                {config.fields.slice(0, 5).map((field) => (
+                  <th key={field}>{fieldLabels[field] || field}</th>
                 ))}
-                <td>
-                  <button className="small" onClick={() => edit(row)}>
-                    Editar
-                  </button>
-                  <button className="small danger" onClick={() => remove(row[config.pk])}>
-                    {config.softDeleteField ? 'Cancelar' : 'Eliminar'}
-                  </button>
-                </td>
+                <th>Acciones</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row[config.pk]}>
+                  <td>{row[config.pk]}</td>
+                  {config.fields.slice(0, 5).map((field) => (
+                    <td key={field}>{renderCell(row, field)}</td>
+                  ))}
+                  <td>
+                    <button type="button" className="small" onClick={() => edit(row)}>Editar</button>
+                    <button type="button" className="small danger" onClick={() => remove(row[config.pk])}>
+                      {config.softDeleteField ? 'Cancelar' : 'Eliminar'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
     </>
   );
 }
