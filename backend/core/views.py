@@ -154,42 +154,144 @@ def me_view(request):
 
 
 def create_default_user_data(user):
-    income = Category.objects.create(
-        id_user=user,
-        name="Salario",
-        type="INCOME",
-        description="Ingresos principales",
-        color="#22c55e",
-    )
-    food = Category.objects.create(
-        id_user=user,
-        name="Alimentación",
-        type="EXPENSE",
-        description="Comidas, supermercado y restaurantes",
-        color="#ef4444",
-    )
-    Category.objects.create(
-        id_user=user,
-        name="Transporte",
-        type="EXPENSE",
-        description="Bus, combustible, Uber o mantenimiento",
-        color="#f97316",
-    )
+    default_categories = [
+        # Ingresos
+        {
+            "name": "Salario",
+            "type": "INCOME",
+            "description": "Pagos fijos de trabajo o empleo principal",
+            "color": "#22c55e",
+        },
+        {
+            "name": "Ventas",
+            "type": "INCOME",
+            "description": "Ingresos por ventas de productos o servicios",
+            "color": "#16a34a",
+        },
+        {
+            "name": "Trabajos extra",
+            "type": "INCOME",
+            "description": "Ingresos por trabajos ocasionales o freelance",
+            "color": "#15803d",
+        },
+        {
+            "name": "Reembolsos",
+            "type": "INCOME",
+            "description": "Devoluciones de dinero o pagos recuperados",
+            "color": "#65a30d",
+        },
+        {
+            "name": "Otros ingresos",
+            "type": "INCOME",
+            "description": "Ingresos no clasificados en otra categoría",
+            "color": "#84cc16",
+        },
+
+        # Gastos
+        {
+            "name": "Alimentación",
+            "type": "EXPENSE",
+            "description": "Supermercado, restaurantes, meriendas y comida diaria",
+            "color": "#ef4444",
+        },
+        {
+            "name": "Transporte",
+            "type": "EXPENSE",
+            "description": "Bus, Uber, gasolina, mantenimiento o transporte diario",
+            "color": "#f97316",
+        },
+        {
+            "name": "Servicios",
+            "type": "EXPENSE",
+            "description": "Luz, agua, internet, teléfono y servicios recurrentes",
+            "color": "#eab308",
+        },
+        {
+            "name": "Vivienda",
+            "type": "EXPENSE",
+            "description": "Alquiler, reparaciones, muebles o gastos del hogar",
+            "color": "#a855f7",
+        },
+        {
+            "name": "Salud",
+            "type": "EXPENSE",
+            "description": "Medicinas, citas médicas, odontología y exámenes",
+            "color": "#06b6d4",
+        },
+        {
+            "name": "Educación",
+            "type": "EXPENSE",
+            "description": "Universidad, cursos, libros y materiales",
+            "color": "#3b82f6",
+        },
+        {
+            "name": "Entretenimiento",
+            "type": "EXPENSE",
+            "description": "Salidas, cine, juegos, conciertos y ocio",
+            "color": "#ec4899",
+        },
+        {
+            "name": "Ropa",
+            "type": "EXPENSE",
+            "description": "Ropa, zapatos y accesorios personales",
+            "color": "#f43f5e",
+        },
+        {
+            "name": "Deporte",
+            "type": "EXPENSE",
+            "description": "Gimnasio, equipo deportivo, competencias o entrenamientos",
+            "color": "#10b981",
+        },
+        {
+            "name": "Tecnología",
+            "type": "EXPENSE",
+            "description": "Celular, computadora, software y accesorios",
+            "color": "#6366f1",
+        },
+        {
+            "name": "Deudas",
+            "type": "EXPENSE",
+            "description": "Pagos de préstamos, tarjetas o cuotas pendientes",
+            "color": "#991b1b",
+        },
+        {
+            "name": "Otros gastos",
+            "type": "EXPENSE",
+            "description": "Gastos no clasificados en otra categoría",
+            "color": "#64748b",
+        },
+    ]
+
+    created_categories = {}
+
+    for category_data in default_categories:
+        category = Category.objects.create(
+            id_user=user,
+            name=category_data["name"],
+            type=category_data["type"],
+            description=category_data["description"],
+            color=category_data["color"],
+        )
+        created_categories[category.name] = category
+
     account = Account.objects.create(
         id_user=user,
         account_name="Efectivo",
         account_type="ACTIVO",
         currency="CRC",
+        id_main_category=created_categories.get("Salario"),
     )
+
     Movement.objects.create(
         id_account=account,
-        id_category=income,
+        id_category=created_categories["Salario"],
         amount=Decimal("0.00"),
         original_currency="CRC",
         description="Cuenta creada",
         movement_date=timezone.localdate(),
     )
-    return food
+
+    return created_categories
 
 
 class LoginRequiredViewSet(viewsets.ModelViewSet):
