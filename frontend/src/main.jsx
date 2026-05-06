@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import {
-  Wallet,
+  createRoot } from 'react-dom/client'; import {   Wallet,
   Tags,
   Landmark,
   Repeat,
@@ -12,14 +11,16 @@ import {
   UserPlus,
   LogIn,
   ChevronDown,
-} from 'lucide-react';
-import {
-  BarChart,
-  Bar, Cell,
+  } from 'lucide-react'; import {   BarChart,
+  Bar,
+  Cell,
   XAxis,
   YAxis,
   Tooltip,
   ResponsiveContainer,
+  PieChart,
+  Pie,
+  Legend,
 } from 'recharts';
 import api from './services/api';
 import './styles.css';
@@ -502,8 +503,136 @@ function Dashboard() {
           </ResponsiveContainer>
         </div>
       </section>
+
+      <CategorySpendingPie />
     </>
   );
+}
+
+
+function CategorySpendingPie() {
+  const [filters, setFilters] = useState({ start_date: '', end_date: '' });
+  const [data, setData] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [error, setError] = useState('');
+
+  const pieColors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'];
+
+  function buildQuery() {
+    const params = new URLSearchParams();
+    if (filters.start_date) params.append('start_date', filters.start_date);
+    if (filters.end_date) params.append('end_date', filters.end_date);
+    const query = params.toString();
+    return query ? `/reports/category-spending/?${query}` : '/reports/category-spending/';
+  }
+
+  function loadReport() {
+    setError('');
+    api
+      .get(buildQuery())
+      .then((r) => {
+        setData(r.data.items || []);
+        setTotal(Number(r.data.total || 0));
+      })
+      .catch(() => setError('No se pudo cargar el reporte por categoría.'));
+  }
+
+  useEffect(() => {
+    loadReport();
+  }, []);
+
+  return (
+    <section className="panel">
+      <div className="panel-title-row">
+        <div>
+          <h2>Gastos por categoría</h2>
+          <p className="muted">Porcentaje del gasto total agrupado por categoría.</p>
+        </div>
+      </div>
+
+      <div className="filter-row">
+        <label>
+          Desde
+          <input
+            type="date"
+            value={filters.start_date}
+            onChange={(e) => setFilters({ ...filters, start_date: e.target.value })}
+          />
+        </label>
+        <label>
+          Hasta
+          <input
+            type="date"
+            value={filters.end_date}
+            onChange={(e) => setFilters({ ...filters, end_date: e.target.value })}
+          />
+        </label>
+        <button type="button" onClick={loadReport}>Aplicar filtro</button>
+        <button
+          type="button"
+          className="secondary"
+          onClick={() => {
+            setFilters({ start_date: '', end_date: '' });
+            setTimeout(loadReport, 0);
+          }}
+        >
+          Todo el tiempo
+        </button>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      {data.length === 0 ? (
+        <p className="muted">Aún no hay gastos registrados para mostrar.</p>
+      ) : (
+        <div className="pie-report-grid">
+          <div className="chart pie-chart-box">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data}
+                  dataKey="total"
+                  nameKey="category"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={95}
+                  label={({ percent }) => `${(percent * 100).toFixed(1)}%`}
+                >
+                  {data.map((entry, index) => (
+                    <Cell key={entry.category} fill={pieColors[index % pieColors.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => Number(value).toFixed(2)} />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Categoría</th>
+                  <th>Total</th>
+                  <th>Porcentaje</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((item) => (
+                  <tr key={item.category}>
+                    <td>{item.category}</td>
+                    <td>{Number(item.total).toFixed(2)}</td>
+                    <td>{Number(item.percentage).toFixed(1)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="muted">Total gastado: {total.toFixed(2)}</p>
+          </div>
+        </div>
+      )}
+    </section>
+);
 }
 
 function Card({ title, value }) {

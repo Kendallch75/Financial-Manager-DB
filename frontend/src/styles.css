@@ -295,3 +295,37 @@ th { color: #475569; background: #f8fafc; }
   flex: 1;
   min-width: 0;
 }
+
+
+.pie-report-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr);
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.pie-chart-box {
+  min-height: 320px;
+}
+
+.panel-title-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.filter-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 760px) {
+  .pie-report-grid {
+    grid-template-columns: 1fr;
+  }
+}

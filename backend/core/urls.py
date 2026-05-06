@@ -13,6 +13,7 @@ from .views import (
     register_view,
     logout_view,
     me_view,
+    category_spending_report,
 )
 
 router = DefaultRouter()
@@ -30,5 +31,6 @@ urlpatterns = [
     path("auth/logout/", logout_view),
     path("auth/me/", me_view),
     path("dashboard/", dashboard),
+    path("reports/category-spending/", category_spending_report),
     path("", include(router.urls)),
 ]

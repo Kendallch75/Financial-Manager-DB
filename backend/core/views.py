@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
-from django.db import transaction
+from django.db import connection, transaction
 from django.db.models import Sum
 from django.utils import timezone
 from datetime import datetime
@@ -503,6 +503,68 @@ class MovementViewSet(LoginRequiredViewSet):
                 status=status.HTTP_201_CREATED,
             )
 
+
+
+
+@api_view(["GET"])
+def category_spending_report(request):
+    user, error = require_login(request)
+    if error:
+        return error
+
+    start_date = request.GET.get("start_date")
+    end_date = request.GET.get("end_date")
+
+    params = [user.id_user]
+    date_filter = ""
+
+    if start_date:
+        date_filter += " AND m.movement_date >= %s"
+        params.append(start_date)
+
+    if end_date:
+        date_filter += " AND m.movement_date <= %s"
+        params.append(end_date)
+
+    query = f"""
+        SELECT
+            c.name AS category,
+            SUM(ABS(m.amount)) AS total
+        FROM MOVEMENT m
+        JOIN ACCOUNT a ON m.id_account = a.id_account
+        JOIN CATEGORY c ON m.id_category = c.id_category
+        WHERE a.id_user = %s
+          AND c.type = 'EXPENSE'
+          AND m.amount < 0
+          {date_filter}
+        GROUP BY c.id_category, c.name
+        ORDER BY total DESC
+    """
+
+    with connection.cursor() as cursor:
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+    total_spent = sum(float(row[1] or 0) for row in rows)
+    items = []
+
+    for category, total in rows:
+        value = float(total or 0)
+        percentage = (value / total_spent * 100) if total_spent else 0
+        items.append(
+            {
+                "category": category,
+                "total": value,
+                "percentage": percentage,
+            }
+        )
+
+    return Response(
+        {
+            "total": total_spent,
+            "items": items,
+        }
+    )
 
 @api_view(["GET"])
 def dashboard(request):
