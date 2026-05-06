@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import {
   BarChart,
-  Bar,
+  Bar, Cell,
   XAxis,
   YAxis,
   Tooltip,
@@ -460,6 +460,11 @@ function Dashboard() {
     { name: 'Gastos', total: Number(stats.expenses) },
     { name: 'Balance', total: Number(stats.balance) },
   ];
+  const chartColors = {
+    Ingresos: '#22c55e',
+    Gastos: '#ef4444',
+    Balance: '#eab308',
+  };
 
   return (
     <>
@@ -485,7 +490,7 @@ function Dashboard() {
               <XAxis dataKey="name" />
               <YAxis />
               <Tooltip />
-              <Bar dataKey="total" />
+              <Bar dataKey="total" radius={[10, 10, 0, 0]}>{chart.map((entry) => (<Cell key={entry.name} fill={chartColors[entry.name] || '#64748b'} />))}</Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
