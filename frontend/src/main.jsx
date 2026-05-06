@@ -518,6 +518,7 @@ function CrudPage({ config }) {
   const visibleFields = config.fields;
 
   const load = () => {
+    setRows([]);
     api
       .get(config.endpoint)
       .then((r) => {
@@ -553,6 +554,8 @@ function CrudPage({ config }) {
   };
 
   useEffect(() => {
+    setRows([]);
+    setLookups({});
     setForm(emptyForm(config.fields));
     setEditing(null);
     setError('');
@@ -634,7 +637,7 @@ function CrudPage({ config }) {
     return String(row[field] ?? '');
   }
 
-  function renderField(field) {
+  function renderField(field) { if (field === 'color') { return ( <div className="color-picker-row"> <input className="color-picker" type="color" value={form[field] || '#22c55e'} onChange={(e) => setForm({ ...form, [field]: e.target.value })} /> <input className="color-code-input" type="text" value={form[field] || '#22c55e'} placeholder="#22c55e" onChange={(e) => setForm({ ...form, [field]: e.target.value })} /> </div> ); }
     if (selectOptions[field]) {
       return (
         <select value={form[field] ?? ''} onChange={(e) => setForm({ ...form, [field]: e.target.value })}>
@@ -653,8 +656,8 @@ function CrudPage({ config }) {
         <select value={form[field] ?? ''} onChange={(e) => setForm({ ...form, [field]: e.target.value })}>
           {relation.allowBlank && <option value="">Sin asignar</option>}
           {!relation.allowBlank && <option value="">Seleccione...</option>}
-          {options.map((option) => (
-            <option key={option[relation.pk]} value={option[relation.pk]}>{relation.label(option)}</option>
+          {options.map((option, index) => (
+            <option key={`${field}-${option[relation.pk] ?? index}`} value={option[relation.pk]}>{relation.label(option)}</option>
           ))}
         </select>
       );
@@ -720,8 +723,8 @@ function CrudPage({ config }) {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
-                <tr key={row[config.pk]}>
+              {rows.map((row, index) => (
+                <tr key={`${config.endpoint}-${row[config.pk] ?? index}`}>
                   <td>{row[config.pk]}</td>
                   {config.fields.slice(0, 5).map((field) => (
                     <td key={field}>{renderCell(row, field)}</td>

@@ -271,3 +271,27 @@ th { color: #475569; background: #f8fafc; }
   .actions button { width: 100%; }
   .auth-card { padding: 22px; }
 }
+
+/* Selector visual de color para categorías */
+.color-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.color-picker {
+  width: 3.2rem;
+  min-width: 3.2rem;
+  height: 2.75rem;
+  padding: 0.2rem;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 0.9rem;
+  background: rgba(15, 23, 42, 0.85);
+  cursor: pointer;
+}
+
+.color-code-input {
+  flex: 1;
+  min-width: 0;
+}
