@@ -1,34 +1,26 @@
-# Parche: moneda principal y valores por defecto en transacciones
+# Patch: Efectivo por defecto en transacciones
 
-Este parche modifica `frontend/src/main.jsx`.
+Este parche modifica `frontend/src/main.jsx` para que, al entrar a **Transacciones**, el campo **Cuenta afectada** seleccione automáticamente la cuenta llamada **Efectivo**.
 
-## Qué cambia
+Si no encuentra una cuenta exactamente llamada `Efectivo`, intenta encontrar una que contenga esa palabra. Si tampoco existe, usa la primera cuenta disponible.
 
-1. En **Cuentas**, el campo `currency` queda como **Moneda principal** y se usa como selección entre:
-   - `CRC`
-   - `USD`
-   - `EUR`
-
-2. En **Transacciones**, la fecha `movement_date` aparece por defecto con la fecha de hoy.
-
-3. En **Transacciones**, al escoger la **Cuenta afectada**, la moneda de la transacción `original_currency` se rellena automáticamente con la moneda principal de esa cuenta.
-   - El usuario todavía puede cambiarla manualmente.
+El usuario puede cambiar la cuenta manualmente.
 
 ## Instalación
 
-Copia este ZIP dentro de la raíz del proyecto y descomprímelo, o descomprímelo donde quieras y ejecuta el script desde la raíz del proyecto.
-
-Ruta esperada del proyecto:
-
-```bash
-/home/kendal/Documentos/financial_manager_login_clean
-```
-
-Ejecuta:
+Desde la raíz del proyecto:
 
 ```bash
 cd /home/kendal/Documentos/financial_manager_login_clean
-python3 apply_currency_defaults_patch.py
+unzip /home/kendal/Descargas/financial_manager_default_cash_account_patch.zip
+python3 apply_default_cash_account_patch.py
+```
+
+Si el archivo está en Downloads:
+
+```bash
+unzip /home/kendal/Downloads/financial_manager_default_cash_account_patch.zip
+python3 apply_default_cash_account_patch.py
 ```
 
 Luego reinicia el frontend:
@@ -38,27 +30,10 @@ cd /home/kendal/Documentos/financial_manager_login_clean/frontend
 npm run dev -- --host 0.0.0.0
 ```
 
-Y abre:
-
-```text
-http://192.168.40.95:5173
-```
-
 ## Respaldo
 
-El script crea un respaldo automático:
+El script crea un respaldo en:
 
 ```text
-frontend/src/main.jsx.backup_currency_defaults
+frontend/src/main.jsx.backup_default_cash_account
 ```
-
-Si algo sale mal, puedes restaurarlo con:
-
-```bash
-cd /home/kendal/Documentos/financial_manager_login_clean
-cp frontend/src/main.jsx.backup_currency_defaults frontend/src/main.jsx
-```
-
-## Nota
-
-Este parche no hace migraciones de base de datos. La columna de moneda ya existe; el cambio principal es de interfaz y comportamiento del formulario.

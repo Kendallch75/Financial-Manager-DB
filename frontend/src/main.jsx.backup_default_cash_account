@@ -721,11 +721,6 @@ function CrudPage({ config }) {
     loadLookups();
   }, [config.endpoint]);
 
-  useEffect(() => {
-    applyDefaultCashAccountIfNeeded();
-  }, [config.endpoint, editing, lookups]);
-
-
   function cleanPayload() {
     const payload = { ...form };
     Object.keys(payload).forEach((key) => {
@@ -791,41 +786,6 @@ function CrudPage({ config }) {
     return item ? relation.label(item) : String(value);
   }
 
-
-
-  function findDefaultCashAccount(accounts) {
-    if (!accounts || accounts.length === 0) return null;
-
-    const byName = accounts.find((account) =>
-      String(account.account_name || '').trim().toLowerCase() === 'efectivo'
-    );
-    if (byName) return byName;
-
-    const byContainsName = accounts.find((account) =>
-      String(account.account_name || '').trim().toLowerCase().includes('efectivo')
-    );
-    if (byContainsName) return byContainsName;
-
-    return accounts[0];
-  }
-
-  function applyDefaultCashAccountIfNeeded() {
-    if (config.endpoint !== '/movements/' || editing) return;
-
-    const accounts = lookups['/accounts/'] || [];
-    const defaultAccount = findDefaultCashAccount(accounts);
-    if (!defaultAccount) return;
-
-    setForm((prev) => {
-      if (prev.id_account) return prev;
-
-      return {
-        ...prev,
-        id_account: String(defaultAccount.id_account),
-        original_currency: defaultAccount.currency || prev.original_currency || 'CRC',
-      };
-    });
-  }
 
   function updateFormField(field, value) {
     setForm((prev) => {
