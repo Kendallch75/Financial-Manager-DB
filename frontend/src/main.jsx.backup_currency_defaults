@@ -113,7 +113,7 @@ const fieldLabels = {
   color: 'Color',
   account_name: 'Nombre cuenta',
   account_type: 'Tipo cuenta',
-  currency: 'Moneda principal',
+  currency: 'Moneda',
   id_main_category: 'Categoría principal',
   service_name: 'Servicio',
   provider_name: 'Proveedor',
@@ -127,7 +127,7 @@ const fieldLabels = {
   id_service: 'Servicio',
   id_exchange_rate: 'Tipo de cambio',
   amount: 'Monto',
-  original_currency: 'Moneda de la transacción',
+  original_currency: 'Moneda original',
   movement_date: 'Fecha',
   from_currency: 'Desde',
   to_currency: 'Hacia',
@@ -143,7 +143,7 @@ const placeholders = {
   color: '#22c55e',
   currency: 'CRC',
   original_currency: 'CRC',
-  movement_date: 'Fecha',
+  movement_date: '2026-04-27',
   rate_date: '2026-04-27T00:00:00',
   payment_interval_months: '1',
 };
@@ -215,19 +215,9 @@ const relationConfig = {
   },
 };
 
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function emptyForm(fields) {
   return Object.fromEntries(
-    fields.map((field) => {
-      if (field === 'movement_date') return [field, todayISO()];
-      if (field === 'currency' || field === 'original_currency') return [field, 'CRC'];
-      if (field === 'color') return [field, '#22c55e'];
-      if (field === 'payment_interval_months') return [field, '1'];
-      return [field, ''];
-    })
+    fields.map((field) => [field, field === 'color' ? '#22c55e' : field === 'payment_interval_months' ? '1' : ''])
   );
 }
 
@@ -786,26 +776,6 @@ function CrudPage({ config }) {
     return item ? relation.label(item) : String(value);
   }
 
-
-  function updateFormField(field, value) {
-    setForm((prev) => {
-      const next = { ...prev, [field]: value };
-
-      if (config.endpoint === '/movements/' && field === 'id_account') {
-        const accounts = lookups['/accounts/'] || [];
-        const selectedAccount = accounts.find(
-          (account) => String(account.id_account) === String(value)
-        );
-
-        if (selectedAccount?.currency) {
-          next.original_currency = selectedAccount.currency;
-        }
-      }
-
-      return next;
-    });
-  }
-
   function renderCell(row, field) {
     if (field === 'color') {
       return <span className="color-dot" style={{ background: row[field] }} />;
@@ -816,10 +786,10 @@ function CrudPage({ config }) {
     return String(row[field] ?? '');
   }
 
-  function renderField(field) { if (field === 'color') { return ( <div className="color-picker-row"> <input className="color-picker" type="color" value={form[field] || '#22c55e'} onChange={(e) => updateFormField(field, e.target.value)} /> <input className="color-code-input" type="text" value={form[field] || '#22c55e'} placeholder="#22c55e" onChange={(e) => updateFormField(field, e.target.value)} /> </div> ); }
+  function renderField(field) { if (field === 'color') { return ( <div className="color-picker-row"> <input className="color-picker" type="color" value={form[field] || '#22c55e'} onChange={(e) => setForm({ ...form, [field]: e.target.value })} /> <input className="color-code-input" type="text" value={form[field] || '#22c55e'} placeholder="#22c55e" onChange={(e) => setForm({ ...form, [field]: e.target.value })} /> </div> ); }
     if (selectOptions[field]) {
       return (
-        <select value={form[field] ?? ''} onChange={(e) => updateFormField(field, e.target.value)}>
+        <select value={form[field] ?? ''} onChange={(e) => setForm({ ...form, [field]: e.target.value })}>
           <option value="">Seleccione...</option>
           {selectOptions[field].map((option) => (
             <option key={option.value} value={option.value}>{option.label}</option>
@@ -832,7 +802,7 @@ function CrudPage({ config }) {
       const relation = relationConfig[field];
       const options = lookups[relation.endpoint] || [];
       return (
-        <select value={form[field] ?? ''} onChange={(e) => updateFormField(field, e.target.value)}>
+        <select value={form[field] ?? ''} onChange={(e) => setForm({ ...form, [field]: e.target.value })}>
           {relation.allowBlank && <option value="">Sin asignar</option>}
           {!relation.allowBlank && <option value="">Seleccione...</option>}
           {options.map((option, index) => (
@@ -856,7 +826,7 @@ function CrudPage({ config }) {
         max={field === 'payment_interval_months' ? '24' : undefined}
         value={form[field] ?? ''}
         placeholder={placeholders[field] || ''}
-        onChange={(e) => updateFormField(field, e.target.value)}
+        onChange={(e) => setForm({ ...form, [field]: e.target.value })}
       />
     );
   }
